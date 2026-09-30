@@ -25,8 +25,49 @@ jobs:
       - name: Build BYD APK
         run: ./gradlew :app:assembleBydRelease
 
-      - name: Upload APK
+      - name: Create signing key
+        run: |
+          keytool -genkeypair \
+            -keystore aurora-byd.jks \
+            -storepass aurorastore \
+            -keypass aurorastore \
+            -alias aurora \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=AuroraStore-BYD, OU=Personal, O=Personal, L=Ankara, ST=Ankara, C=TR"
+
+      - name: Sign APK
+        run: |
+          UNSIGNED_APK=$(find app/build/outputs/apk/byd/release -name "*unsigned.apk" | head -n 1)
+
+          if [ -z "$UNSIGNED_APK" ]; then
+            echo "Unsigned APK bulunamadi"
+            exit 1
+          fi
+
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner bulunamadi"
+            exit 1
+          fi
+
+          "$APKSIGNER" sign \
+            --ks aurora-byd.jks \
+            --ks-key-alias aurora \
+            --ks-pass pass:aurorastore \
+            --key-pass pass:aurorastore \
+            --out AuroraStore-BYD-signed.apk \
+            "$UNSIGNED_APK"
+
+      - name: Verify signed APK
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          "$APKSIGNER" verify --verbose --print-certs AuroraStore-BYD-signed.apk
+
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: AuroraStore-BYD
-          path: app/build/outputs/apk/byd/release/*.apk
+          name: AuroraStore-BYD-SIGNED
+          path: AuroraStore-BYD-signed.apk
